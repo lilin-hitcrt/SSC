@@ -8,8 +8,8 @@ eval_pair:
 eval_seq:
   cloud_path: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/velodyne/"
   label_path: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/labels/"
-  pairs_file: "/media/l/yp2/pairs/neg_100/08.txt"
-  out_file: "08.txt"
+  pairs_file: "../pairs/neg_100/08.txt"
+  out_file: "../data/08.txt"
 labels: 
   0 : "unlabeled"
   1 : "outlier"
