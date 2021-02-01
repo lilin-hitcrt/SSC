@@ -22,6 +22,10 @@ int main(){
         f_pairs >> sequ1;
         f_pairs >> sequ2;
         f_pairs >> label;
+        // if(num<2000){
+        //     ++num;
+        //     continue;
+        // }
         if (sequ1.empty() || sequ2.empty())
         {
             break;

@@ -1,10 +1,13 @@
 #include "ssc.h"
 SSC::SSC(std::string conf_file)
 {
+        #if SHOW
+   viewer.reset(new pcl::visualization::CloudViewer("viewer"));
+    #endif
     auto data_cfg = YAML::LoadFile(conf_file);
     if (data_cfg["name"].as<std::string>() == "rn")
     {
-        use_sk = false;
+        use_sk = false;//labels from semantic kitti or rangenet++
     }
     auto color_map = data_cfg["color_map"];
     learning_map = data_cfg["learning_map"];
@@ -148,6 +151,15 @@ pcl::PointCloud<pcl::PointXYZL>::Ptr SSC::getLCloud(std::string file_cloud, std:
     re_cloud->width = re_cloud->points.size();
     return re_cloud;
 }
+pcl::PointCloud<pcl::PointXYZL>::Ptr SSC::getLCloud(std::string file_cloud){
+    pcl::PointCloud<pcl::PointXYZL>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZL>);
+    if (pcl::io::loadPCDFile<pcl::PointXYZL> (file_cloud, *cloud) == -1) //* load the file
+    {
+        PCL_ERROR ("Couldn't read file test_pcd.pcd \n");
+        return NULL;
+    }
+    return cloud;
+}
 
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr SSC::getColorCloud(pcl::PointCloud<pcl::PointXYZL>::Ptr &cloud_in)
 {
@@ -165,32 +177,56 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr SSC::getColorCloud(pcl::PointCloud<pcl::P
     return outcloud;
 }
 
-void SSC::calculate_ssc_range(const pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud, cv::Mat3f &ssc_dis)
+cv::Mat SSC::calculate_ssc_range(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud)
 {
-    int sectors = 360;
-    auto sector_step = 2. * M_PI / sectors;
-    ssc_dis = cv::Mat::zeros(cv::Size(sectors, 1), CV_32FC3);
-    for (int i = 0; i < (int)filtered_pointcloud->points.size(); i++)
+    auto sector_step = 2. * M_PI / sectors_range;
+    cv::Mat ssc_dis = cv::Mat::zeros(cv::Size(sectors, 1), CV_32FC4);
+    for (uint i = 0; i < filtered_pointcloud->points.size(); i++)
     {
-        double distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
-        double angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
+        float distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
+        float angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
         int sector_id = std::floor(angle / sector_step);
-        if (sector_id >= sectors)
+        if (sector_id >= sectors||sector_id<0)
             continue;
         auto label = filtered_pointcloud->points[i].label;
         if (label == 13 || label == 14 || label == 16 || label == 18 || label == 19)
         {
-            ssc_dis.at<cv::Vec3f>(0, sector_id)[0] = distance;
-            ssc_dis.at<cv::Vec3f>(0, sector_id)[1] = filtered_pointcloud->points[i].x;
-            ssc_dis.at<cv::Vec3f>(0, sector_id)[2] = filtered_pointcloud->points[i].y;
+            ssc_dis.at<cv::Vec4f>(0, sector_id)[0] = distance;
+            ssc_dis.at<cv::Vec4f>(0, sector_id)[1] = filtered_pointcloud->points[i].x;
+            ssc_dis.at<cv::Vec4f>(0, sector_id)[2] = filtered_pointcloud->points[i].y;
+            ssc_dis.at<cv::Vec4f>(0, sector_id)[3] = label;
         }
     }
+    return ssc_dis;
+}
+cv::Mat1i SSC::calculate_ssc_multi( pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud){
+    auto ring_step = max_dis / rings;
+    auto sector_step = 2. * M_PI / sectors;
+    cv::Mat1i ssc = cv::Mat::zeros(cv::Size(sectors, rings), CV_32S);
+    for (int i = 0; i < (int)filtered_pointcloud->points.size(); i++)
+    {
+        double distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
+        if (distance >= max_dis)
+            continue;
+        double angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
+        int ring_id = std::floor(distance / ring_step);
+        int sector_id = std::floor(angle / sector_step);
+        if (ring_id >= rings||ring_id<0)
+            continue;
+        if (sector_id >= sectors||sector_id<0)
+            continue;
+        auto label = filtered_pointcloud->points[i].label;
+
+        if (order_vec[label] >0)
+        {
+            ssc.at<int>(ring_id, sector_id) |= (1<<label);
+        }
+    }
+    return ssc;
 }
 
-cv::Mat1b SSC::calculate_ssc(const pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud)
+cv::Mat1b SSC::calculate_ssc(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud)
 {
-    int sectors = 360, rings = 50;
-    double max_dis = 50;
     auto ring_step = max_dis / rings;
     auto sector_step = 2. * M_PI / sectors;
     cv::Mat1b ssc = cv::Mat::zeros(cv::Size(sectors, rings), CV_8U);
@@ -202,15 +238,40 @@ cv::Mat1b SSC::calculate_ssc(const pcl::PointCloud<pcl::PointXYZL>::Ptr filtered
         double angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
         int ring_id = std::floor(distance / ring_step);
         int sector_id = std::floor(angle / sector_step);
-        if (ring_id >= rings)
+        if (ring_id >= rings||ring_id<0)
             continue;
-        if (sector_id >= sectors)
+        if (sector_id >= sectors||sector_id<0)
             continue;
         auto label = filtered_pointcloud->points[i].label;
 
         if (order_vec[label] > order_vec[ssc.at<unsigned char>(ring_id, sector_id)])
         {
             ssc.at<unsigned char>(ring_id, sector_id) = label;
+        }
+    }
+    return ssc;
+}
+cv::Mat1f SSC::calculate_sc( pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud){
+    auto ring_step = max_dis / rings;
+    auto sector_step = 2. * M_PI / sectors;
+    cv::Mat1f ssc = -1000*cv::Mat::ones(cv::Size(sectors, rings), CV_32F);
+    for (int i = 0; i < (int)filtered_pointcloud->points.size(); i++)
+    {
+        double distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
+        if (distance >= max_dis)
+            continue;
+        double angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
+        int ring_id = std::floor(distance / ring_step);
+        int sector_id = std::floor(angle / sector_step);
+        if (ring_id >= rings||ring_id<0)
+            continue;
+        if (sector_id >= sectors||sector_id<0)
+            continue;
+        auto z = filtered_pointcloud->points[i].z+2;
+
+        if (z > order_vec[ssc.at<float>(ring_id, sector_id)])
+        {
+            ssc.at<float>(ring_id, sector_id) = z;
         }
     }
     return ssc;
@@ -231,7 +292,7 @@ cv::Mat3b SSC::getColorImage(cv::Mat1b &desc)
     return out;
 }
 
-void SSC::calculate_trans(cv::Mat3f &ssc_dis1, cv::Mat3f &ssc_dis2, double &angle, float &diff_x, float &diff_y)
+void SSC::calculate_trans(cv::Mat4f &ssc_dis1, cv::Mat4f &ssc_dis2, double &angle, float &diff_x, float &diff_y)
 {
     double similarity = 100000;
     int sectors = ssc_dis1.cols;
@@ -241,9 +302,13 @@ void SSC::calculate_trans(cv::Mat3f &ssc_dis1, cv::Mat3f &ssc_dis2, double &angl
         for (int j = 0; j < sectors; ++j)
         {
             int new_col = j + i >= sectors ? j + i - sectors : j + i;
-            cv::Vec3f vec1 = ssc_dis1.at<cv::Vec3f>(0, j);
-            cv::Vec3f vec2 = ssc_dis2.at<cv::Vec3f>(0, new_col);
-            dis_count += fabs(vec1[0] - vec2[0]);
+            cv::Vec4f vec1 = ssc_dis1.at<cv::Vec4f>(0, j);
+            cv::Vec4f vec2 = ssc_dis2.at<cv::Vec4f>(0, new_col);
+            // if(fabs(vec1[3]-vec2[3])<1e-6){
+                dis_count += fabs(vec1[0] - vec2[0]);
+            // }else{
+            //     dis_count +=10000;
+            // }
         }
         if (dis_count < similarity)
         {
@@ -259,8 +324,8 @@ void SSC::calculate_trans(cv::Mat3f &ssc_dis1, cv::Mat3f &ssc_dis2, double &angl
     auto temp_dis2 = ssc_dis2.clone();
     for (int i = 0; i < sectors; ++i)
     {
-        temp_dis2.at<cv::Vec3f>(0, i)[1] = ssc_dis2.at<cv::Vec3f>(0, i)[1] * cs - ssc_dis2.at<cv::Vec3f>(0, i)[2] * sn;
-        temp_dis2.at<cv::Vec3f>(0, i)[2] = ssc_dis2.at<cv::Vec3f>(0, i)[1] * sn + ssc_dis2.at<cv::Vec3f>(0, i)[2] * cs;
+        temp_dis2.at<cv::Vec4f>(0, i)[1] = ssc_dis2.at<cv::Vec4f>(0, i)[1] * cs - ssc_dis2.at<cv::Vec4f>(0, i)[2] * sn;
+        temp_dis2.at<cv::Vec4f>(0, i)[2] = ssc_dis2.at<cv::Vec4f>(0, i)[1] * sn + ssc_dis2.at<cv::Vec4f>(0, i)[2] * cs;
     }
     for (int i = 0; i < 100; ++i)
     {
@@ -268,7 +333,7 @@ void SSC::calculate_trans(cv::Mat3f &ssc_dis1, cv::Mat3f &ssc_dis2, double &angl
         int diff_count = 1;
         for (int j = 0; j < sectors; ++j)
         {
-            cv::Vec3f vec1 = temp_dis1.at<cv::Vec3f>(0, j);
+            cv::Vec4f vec1 = temp_dis1.at<cv::Vec4f>(0, j);
             if (vec1[0] <= 0)
             {
                 continue;
@@ -277,7 +342,7 @@ void SSC::calculate_trans(cv::Mat3f &ssc_dis1, cv::Mat3f &ssc_dis2, double &angl
             float min_dis = 1000000.;
             for (int k = j + angle_o - 10; k < j + angle_o + 10; ++k)
             {
-                cv::Vec3f vec_temp;
+                cv::Vec4f vec_temp;
                 int temp_id = k;
                 if (k < 0)
                 {
@@ -287,7 +352,7 @@ void SSC::calculate_trans(cv::Mat3f &ssc_dis1, cv::Mat3f &ssc_dis2, double &angl
                 {
                     temp_id = k - sectors;
                 }
-                vec_temp = temp_dis2.at<cv::Vec3f>(0, temp_id);
+                vec_temp = temp_dis2.at<cv::Vec4f>(0, temp_id);
                 if (vec_temp[0] <= 0)
                 {
                     continue;
@@ -303,7 +368,7 @@ void SSC::calculate_trans(cv::Mat3f &ssc_dis1, cv::Mat3f &ssc_dis2, double &angl
             {
                 continue;
             }
-            cv::Vec3f vec2 = temp_dis2.at<cv::Vec3f>(0, min_id);
+            cv::Vec4f vec2 = temp_dis2.at<cv::Vec4f>(0, min_id);
             // std::cout<<fabs(vec1[1]-vec2[1])<<" "<<fabs(vec1[2]-vec2[2])<<std::endl;
             if (fabs(vec1[1] - vec2[1]) < 3 && fabs(vec1[2] - vec2[2]) < 3)
             {
@@ -319,25 +384,25 @@ void SSC::calculate_trans(cv::Mat3f &ssc_dis1, cv::Mat3f &ssc_dis2, double &angl
 #endif
         for (int j = 0; j < sectors; ++j)
         {
-            if (temp_dis2.at<cv::Vec3f>(0, j)[0] != 0)
+            if (temp_dis2.at<cv::Vec4f>(0, j)[0] != 0)
             {
-                temp_dis2.at<cv::Vec3f>(0, j)[1] += dx;
-                temp_dis2.at<cv::Vec3f>(0, j)[2] += dy;
+                temp_dis2.at<cv::Vec4f>(0, j)[1] += dx;
+                temp_dis2.at<cv::Vec4f>(0, j)[2] += dy;
 #if SHOW
                 pcl::PointXYZRGB p;
-                p.x = temp_dis2.at<cv::Vec3f>(0, j)[1];
-                p.y = temp_dis2.at<cv::Vec3f>(0, j)[2];
+                p.x = temp_dis2.at<cv::Vec4f>(0, j)[1];
+                p.y = temp_dis2.at<cv::Vec4f>(0, j)[2];
                 p.z = 0;
                 p.r = 255;
                 temp_cloud->points.emplace_back(p);
 #endif
             }
 #if SHOW
-            if (temp_dis1.at<cv::Vec3f>(0, j)[0] != 0)
+            if (temp_dis1.at<cv::Vec4f>(0, j)[0] != 0)
             {
                 pcl::PointXYZRGB p;
-                p.x = temp_dis1.at<cv::Vec3f>(0, j)[1];
-                p.y = temp_dis1.at<cv::Vec3f>(0, j)[2];
+                p.x = temp_dis1.at<cv::Vec4f>(0, j)[1];
+                p.y = temp_dis1.at<cv::Vec4f>(0, j)[2];
                 p.z = 0;
                 p.b = 255;
                 temp_cloud->points.emplace_back(p);
@@ -345,8 +410,8 @@ void SSC::calculate_trans(cv::Mat3f &ssc_dis1, cv::Mat3f &ssc_dis2, double &angl
 #endif
         }
 #if SHOW
-        viewer.showCloud(temp_cloud);
-        usleep(100000);
+        viewer->showCloud(temp_cloud);
+        usleep(1000000);
 #endif
         diff_x += dx;
         diff_y += dy;
@@ -359,7 +424,32 @@ void SSC::calculate_trans(cv::Mat3f &ssc_dis1, cv::Mat3f &ssc_dis2, double &angl
         }
     }
 }
-
+double SSC::calculate_dis_sc(cv::Mat1f &desc1, cv::Mat1f &desc2){
+    double similarity = 0;
+    int sectors = desc1.cols;
+    int rings = desc1.rows;
+    int valid_num = 0;
+    for (int p = 0; p < sectors; p++)
+    {
+        for (int q = 0; q < rings; q++)
+        {
+            if (desc1.at<float>(q, p) < -100)
+            {
+                desc1.at<float>(q, p)=0;
+            }
+            if( desc2.at<float>(q, p) < -100){
+                desc2.at<float>(q, p)=0;
+            }
+            if(fabs(desc1.at<float>(q, p))<1e-6&&fabs(desc2.at<float>(q, p))<1e-6){
+                continue;
+            }
+            valid_num++;
+            similarity+=fabs(desc1.at<float>(q, p)-desc2.at<float>(q, p));
+        }
+    }
+    // std::cout<<similarity<<std::endl;
+    return 1-similarity / valid_num;
+}
 double SSC::calculate_dis(cv::Mat1b &desc1, cv::Mat1b &desc2)
 {
     double similarity = 0;
@@ -385,13 +475,77 @@ double SSC::calculate_dis(cv::Mat1b &desc1, cv::Mat1b &desc2)
     // std::cout<<similarity<<std::endl;
     return similarity / valid_num;
 }
+int num_of_one(int num){
+    int count=0;
+    while(num!=0){
+        num=num&(num-1);
+        count++;
+    }
+    return count;
+}
+double SSC::calculate_dis_multi(cv::Mat1i &desc1, cv::Mat1i &desc2){
+    double similarity = 0;
+    int sectors = desc1.cols;
+    int rings = desc1.rows;
+    int valid_num = 0;
+    for (int p = 0; p < sectors; p++)
+    {
+        for (int q = 0; q < rings; q++)
+        {
+            if (desc1.at<int>(q, p) == 0 && desc2.at<int>(q, p) == 0)
+            {
+                continue;
+            }
+            valid_num++;
+            int sam_num=num_of_one(desc1.at<int>(q, p)&desc2.at<int>(q, p));
+            int nonezero_num=num_of_one(desc1.at<int>(q, p)|desc2.at<int>(q, p));
+            similarity+=1.0*sam_num/nonezero_num;
+        }
+    }
+    // std::cout<<similarity<<std::endl;
+    return similarity / valid_num;
+}
+
+double SSC::calculate_angle_test(pcl::PointCloud<pcl::PointXYZL>::Ptr cloud1,pcl::PointCloud<pcl::PointXYZL>::Ptr cloud2){
+    auto desc1 = calculate_ssc(cloud1);
+    auto desc2 = calculate_ssc(cloud2);
+    double similarity = 0.0,angle=0;
+    for(int i=0;i<sectors;i++){
+        int match_count=0;
+        for(int p=0;p<sectors;p++){
+            int new_col = p+i>=sectors?p+i-sectors:p+i;
+            for(int q=0;q<rings;q++){
+                if (desc1.at<unsigned char>(q, p) == 0 && desc2.at<unsigned char>(q, p) == 0)
+            {
+                continue;
+            }
+                if(desc1.at<unsigned char>(q,p)== desc2.at<unsigned char>(q,new_col)){
+                    match_count++;
+                }
+            }
+        }
+        if(match_count>similarity){
+            similarity=match_count;
+            angle = i;
+        }
+
+    }
+    // angle = M_PI * (360. - angle * 360. / sectors) / 180.;
+    return angle;
+}
 
 double SSC::getScore(pcl::PointCloud<pcl::PointXYZL>::Ptr cloud1, pcl::PointCloud<pcl::PointXYZL>::Ptr cloud2, double &angle, float &diff_x, float &diff_y)
 {
-    cv::Mat3f ssc_dis1, ssc_dis2;
-    calculate_ssc_range(cloud1, ssc_dis1);
-    calculate_ssc_range(cloud2, ssc_dis2);
+    angle=0;
+    diff_x=0;
+    diff_y=0;
+    cv::Mat4f ssc_dis1=calculate_ssc_range(cloud1);
+    cv::Mat4f ssc_dis2=calculate_ssc_range(cloud2);
+    // angle=calculate_angle_test(cloud1,cloud2);
     calculate_trans(ssc_dis1, ssc_dis2, angle, diff_x, diff_y);
+    // angle=0;
+    // diff_x=0;
+    // diff_y=0;
     if (fabs(diff_x > 5) || fabs(diff_y) > 5)
     {
         diff_x = 0;
@@ -405,26 +559,38 @@ double SSC::getScore(pcl::PointCloud<pcl::PointXYZL>::Ptr cloud1, pcl::PointClou
     auto desc1 = calculate_ssc(cloud1);
     auto desc2 = calculate_ssc(trans_cloud);
     auto score = calculate_dis(desc1, desc2);
+    // auto desc1 = calculate_ssc_multi(cloud1);
+    // auto desc2 = calculate_ssc_multi(trans_cloud);
+    // auto score = calculate_dis_multi(desc1, desc2);
+    // auto desc1 = calculate_sc(cloud1);
+    // auto desc2 = calculate_sc(trans_cloud);
+    // auto score = calculate_dis_sc(desc1, desc2);
+
 
 #if SHOW
+// if(score>0.4){
     auto color_cloud1 = getColorCloud(cloud1);
     auto color_cloud2 = getColorCloud(trans_cloud);
     *color_cloud2 += *color_cloud1;
-    viewer.showCloud(color_cloud2);
+    // color_cloud1->height=1;
+    // color_cloud1->width=color_cloud1->points.size();
+    // color_cloud2->height=1;
+    // color_cloud2->width=color_cloud2->points.size();
+    // pcl::io::savePCDFileASCII ("cloud735.pcd", *color_cloud1);
+    // pcl::io::savePCDFileASCII ("cloud1469.pcd", *color_cloud2);
+    viewer->showCloud(color_cloud2);
     auto color_image1 = getColorImage(desc1);
     cv::imshow("color image1", color_image1);
     auto color_image2 = getColorImage(desc2);
     cv::imshow("color image2", color_image2);
     cv::waitKey(0);
+// }
 #endif
     return score;
 }
 
 double SSC::getScore(std::string cloud_file1, std::string cloud_file2, std::string label_file1, std::string label_file2, double &angle, float &diff_x, float &diff_y)
 {
-    angle=0;
-    diff_x=0;
-    diff_y=0;
     auto cloudl1 = getLCloud(cloud_file1, label_file1);
     auto cloudl2 = getLCloud(cloud_file2, label_file2);
     auto score = getScore(cloudl1, cloudl2, angle,diff_x,diff_y);

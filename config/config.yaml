@@ -1,15 +1,17 @@
 # This file is covered by the LICENSE file in the root of this project.
 name: "sk"
 eval_pair:
-  cloud_file1: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/velodyne/001844.bin"
-  cloud_file2: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/velodyne/000075.bin"
-  label_file1: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/labels/001844.label"
-  label_file2: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/labels/000075.label"
+  cloud_file1: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/velodyne/000735.bin"
+  cloud_file2: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/velodyne/001469.bin"
+  label_file1: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/labels/000735.label"
+  label_file2: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/labels/001469.label"
 eval_seq:
   cloud_path: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/velodyne/"
   label_path: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/labels/"
-  pairs_file: "../pairs/neg_100/08.txt"
+  pairs_file: "../pairs/neg_1/08.txt"
   out_file: "../data/08.txt"
+  pose_file: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/poses.txt"
+  calib_file: "/media/l/yp2/KITTI/odometry/dataset/sequences/08/calib.txt"
 labels: 
   0 : "unlabeled"
   1 : "outlier"
