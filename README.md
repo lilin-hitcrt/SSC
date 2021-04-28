@@ -14,3 +14,5 @@ Modify the [configuration file](config/config.yaml).
     cd ../bin
     ./eval_pair or ./eval_seq
 ```
+## pairs list
+[pairs](https://drive.google.com/file/d/1Y540LJFZHiaAooUX2KtxNIQhw-kzy7gQ/view?usp=sharing)
