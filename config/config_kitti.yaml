@@ -10,7 +10,7 @@ eval_pair:
 eval_seq:
   cloud_path: "/media/l/yp2/KITTI/odometry/dataset/sequences/00/velodyne/"
   label_path: "/media/l/yp2/KITTI/odometry/dataset/sequences/00/labels/"
-  pairs_file: "/media/l/yp2/pairs/neg_100/00.txt"
+  pairs_file: "../pairs/pairs_kitti/neg_100/00.txt"
   out_file: "../out/00.txt"
 rotate: false
 occlusion: false
