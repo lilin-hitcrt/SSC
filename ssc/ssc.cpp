@@ -1,14 +1,18 @@
 #include "ssc.h"
 SSC::SSC(std::string conf_file)
 {
-        #if SHOW
-   viewer.reset(new pcl::visualization::CloudViewer("viewer"));
-    #endif
     auto data_cfg = YAML::LoadFile(conf_file);
-    if (data_cfg["name"].as<std::string>() == "rn")
+    show = data_cfg["show"].as<bool>();
+    remap = data_cfg["remap"].as<bool>();
+    if (show)
     {
-        use_sk = false;//labels from semantic kitti or rangenet++
+        viewer.reset(new pcl::visualization::CloudViewer("viewer"));
     }
+    rotate = data_cfg["rotate"].as<bool>();
+    occlusion = data_cfg["occlusion"].as<bool>();
+    gettimeofday(&time_t, nullptr);
+    random_generator.reset(new std::default_random_engine(time_t.tv_usec));
+    random_distribution.reset(new std::uniform_int_distribution<int>(-18000, 18000));
     auto color_map = data_cfg["color_map"];
     learning_map = data_cfg["learning_map"];
     label_map.resize(260);
@@ -28,7 +32,6 @@ SSC::SSC(std::string conf_file)
         _color_map[key] = color;
     }
     auto learning_class = data_cfg["learning_map_inv"];
-    auto _n_classes = learning_class.size();
     for (it = learning_class.begin(); it != learning_class.end(); ++it)
     {
         int key = it->first.as<int>(); // <- key
@@ -39,123 +42,84 @@ SSC::SSC(std::string conf_file)
 SSC::~SSC()
 {
 }
-pcl::PointCloud<pcl::PointXYZI>::Ptr SSC::getCloud(std::string file)
-{
-    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud;
-    int32_t num = 600000;
-    float *data = (float *)malloc(num * sizeof(float));
-    float *px = data + 0;
-    float *py = data + 1;
-    float *pz = data + 2;
-    float *pr = data + 3;
-    FILE *stream;
-    stream = fopen(file.c_str(), "rb");
-    if (stream == NULL)
-    {
-        std::cerr << "stream is NULL!" << std::endl;
-        return NULL;
-    }
-    cloud.reset(new pcl::PointCloud<pcl::PointXYZI>());
-    num = fread(data, sizeof(float), num, stream) / 4;
-    cloud->points.resize(num);
-    for (int32_t i = 0; i < num; i++)
-    {
-        pcl::PointXYZI p;
-        p.x = (*px);
-        p.y = (*py);
-        p.z = (*pz);
-        p.intensity = (*pr);
-        px += 4;
-        py += 4;
-        pz += 4;
-        pr += 4;
-        cloud->points[i] = p;
-    }
-    cloud->height = 1;
-    cloud->width = cloud->points.size();
-    fclose(stream);
-    free(data);
-    return cloud;
-}
-
-void SSC::getLabel(std::string file, std::vector<uint32_t> &sem_labels, std::vector<uint32_t> &ins_labels)
-{
-    int32_t num = 1000000;
-    uint32_t *data = (uint32_t *)malloc(num * sizeof(uint32_t));
-    uint32_t *px = data + 0;
-    FILE *stream;
-    stream = fopen(file.c_str(), "rb");
-    if (stream == NULL)
-    {
-        std::cerr << "stream is NULL!" << std::endl;
-    }
-    num = fread(data, sizeof(uint32_t), num, stream);
-    for (int32_t i = 0; i < num; i++)
-    {
-        uint32_t label = (*px);
-        uint32_t sem_label;
-        if (use_sk)
-        {
-            sem_label = label_map[(int)(label & 0x0000ffff)];
-        }
-        else
-        {
-            sem_label = label;
-        }
-        uint32_t ins_label = (label & 0xffff0000) >> 16;
-        sem_labels[i] = sem_label;
-        ins_labels[i] = ins_label;
-        px += 1;
-        // std::cout<<label<<" "<<sem_label<<" "<<ins_label<<std::endl;
-    }
-    fclose(stream);
-    free(data);
-}
 
 pcl::PointCloud<pcl::PointXYZL>::Ptr SSC::getLCloud(std::string file_cloud, std::string file_label)
 {
-    struct timeval time_t;
-    double time1, time2;
     pcl::PointCloud<pcl::PointXYZL>::Ptr re_cloud(new pcl::PointCloud<pcl::PointXYZL>());
-    gettimeofday(&time_t, NULL);
-    time1 = time_t.tv_sec * 1e3 + time_t.tv_usec * 1e-3;
-    auto cloud = getCloud(file_cloud);
-    gettimeofday(&time_t, NULL);
-    time2 = time_t.tv_sec * 1e3 + time_t.tv_usec * 1e-3;
-    if (time2 - time1 > 100)
+    std::ifstream in_label(file_label, std::ios::binary);
+    if (!in_label.is_open())
     {
-        std::cout << "get cloud:" << time2 - time1 << " ms" << std::endl;
+        std::cerr << "No file:" << file_label << std::endl;
+        exit(-1);
     }
-    // std::cout<<"cloud time:"<<time2-time1<<" "<<cloud->points.size()<<std::endl;
-    std::vector<uint32_t> ins_labels, sem_labels;
-    ins_labels.resize(cloud->points.size());
-    sem_labels.resize(cloud->points.size());
-    getLabel(file_label, sem_labels, ins_labels);
-    gettimeofday(&time_t, NULL);
-    time1 = time_t.tv_sec * 1e3 + time_t.tv_usec * 1e-3;
-    // std::cout<<"label time:"<<time1-time2<<std::endl;
-    // std::cout<<sem_labels.size()<<" "<<cloud->points.size()<<std::endl;
-    re_cloud->points.resize(cloud->points.size());
-    for (int i = 0; i < cloud->points.size(); ++i)
+    in_label.seekg(0, std::ios::end);
+    uint32_t num_points = in_label.tellg() / sizeof(uint32_t);
+    in_label.seekg(0, std::ios::beg);
+    std::vector<uint32_t> values_label(num_points);
+    in_label.read((char *)&values_label[0], num_points * sizeof(uint32_t));
+    std::ifstream in_cloud(file_cloud, std::ios::binary);
+    std::vector<float> values_cloud(4 * num_points);
+    in_cloud.read((char *)&values_cloud[0], 4 * num_points * sizeof(float));
+    re_cloud->points.resize(num_points);
+    float random_angle = 0, max_angle = 0;
+    float cs = 1, ss = 0;
+    if (rotate || occlusion)
     {
-        if (sem_labels[i] == 0)
+        random_angle = (*random_distribution)(*random_generator) * M_PI / 18000.0;
+        max_angle = random_angle + M_PI / 6.;
+        cs = cos(random_angle);
+        ss = sin(random_angle);
+    }
+    for (uint32_t i = 0; i < num_points; ++i)
+    {
+        if (occlusion)
         {
+            float theta = atan2(values_cloud[4 * i + 1], values_cloud[4 * i]);
+            if (theta > random_angle && theta < max_angle)
+            {
+                continue;
+            }
+        }
+        uint32_t sem_label;
+        if (remap)
+        {
+            sem_label = label_map[(int)(values_label[i] & 0x0000ffff)];
+        }
+        else
+        {
+            sem_label = values_label[i];
+        }
+        if (sem_label == 0)
+        {
+            re_cloud->points[i].x = 0;
+            re_cloud->points[i].y = 0;
+            re_cloud->points[i].z = 0;
+            re_cloud->points[i].label = 0;
             continue;
         }
-        re_cloud->points[i].x = cloud->points[i].x;
-        re_cloud->points[i].y = cloud->points[i].y;
-        re_cloud->points[i].z = cloud->points[i].z;
-        re_cloud->points[i].label = sem_labels[i];
+        if (rotate)
+        {
+            re_cloud->points[i].x = values_cloud[4 * i] * cs - values_cloud[4 * i + 1] * ss;
+            re_cloud->points[i].y = values_cloud[4 * i] * ss + values_cloud[4 * i + 1] * cs;
+        }
+        else
+        {
+            re_cloud->points[i].x = values_cloud[4 * i];
+            re_cloud->points[i].y = values_cloud[4 * i + 1];
+        }
+        re_cloud->points[i].z = values_cloud[4 * i + 2];
+        re_cloud->points[i].label = sem_label;
     }
-    re_cloud->height = 1;
-    re_cloud->width = re_cloud->points.size();
+    in_label.close();
+    in_cloud.close();
     return re_cloud;
 }
-pcl::PointCloud<pcl::PointXYZL>::Ptr SSC::getLCloud(std::string file_cloud){
+pcl::PointCloud<pcl::PointXYZL>::Ptr SSC::getLCloud(std::string file_cloud)
+{
     pcl::PointCloud<pcl::PointXYZL>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZL>);
-    if (pcl::io::loadPCDFile<pcl::PointXYZL> (file_cloud, *cloud) == -1) //* load the file
+    if (pcl::io::loadPCDFile<pcl::PointXYZL>(file_cloud, *cloud) == -1) //* load the file
     {
-        PCL_ERROR ("Couldn't read file test_pcd.pcd \n");
+        PCL_ERROR("Couldn't read file test_pcd.pcd \n");
         return NULL;
     }
     return cloud;
@@ -174,112 +138,74 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr SSC::getColorCloud(pcl::PointCloud<pcl::P
         outcloud->points[i].g = std::get<1>(_argmax_to_rgb[cloud_in->points[i].label]);
         outcloud->points[i].b = std::get<2>(_argmax_to_rgb[cloud_in->points[i].label]);
     }
+    outcloud->height = 1;
+    outcloud->width = outcloud->points.size();
     return outcloud;
 }
 
-cv::Mat SSC::calculate_ssc_range(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud)
+cv::Mat SSC::project(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud)
 {
-    auto sector_step = 2. * M_PI / sectors_range;
+    auto sector_step = 2. * M_PI / sectors;
     cv::Mat ssc_dis = cv::Mat::zeros(cv::Size(sectors, 1), CV_32FC4);
     for (uint i = 0; i < filtered_pointcloud->points.size(); i++)
     {
-        float distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
-        float angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
-        int sector_id = std::floor(angle / sector_step);
-        if (sector_id >= sectors||sector_id<0)
-            continue;
         auto label = filtered_pointcloud->points[i].label;
         if (label == 13 || label == 14 || label == 16 || label == 18 || label == 19)
         {
+            float distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
+            if (distance < 1e-2)
+            {
+                continue;
+            }
+            // int sector_id = cv::fastAtan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
+            float angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
+            int sector_id = std::floor(angle / sector_step);
+            if (sector_id >= sectors || sector_id < 0)
+                continue;
+            // if(ssc_dis.at<cv::Vec4f>(0, sector_id)[3]<10||distance<ssc_dis.at<cv::Vec4f>(0, sector_id)[0]){
             ssc_dis.at<cv::Vec4f>(0, sector_id)[0] = distance;
             ssc_dis.at<cv::Vec4f>(0, sector_id)[1] = filtered_pointcloud->points[i].x;
             ssc_dis.at<cv::Vec4f>(0, sector_id)[2] = filtered_pointcloud->points[i].y;
             ssc_dis.at<cv::Vec4f>(0, sector_id)[3] = label;
+            // }
         }
     }
     return ssc_dis;
 }
-cv::Mat1i SSC::calculate_ssc_multi( pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud){
-    auto ring_step = max_dis / rings;
-    auto sector_step = 2. * M_PI / sectors;
-    cv::Mat1i ssc = cv::Mat::zeros(cv::Size(sectors, rings), CV_32S);
-    for (int i = 0; i < (int)filtered_pointcloud->points.size(); i++)
-    {
-        double distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
-        if (distance >= max_dis)
-            continue;
-        double angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
-        int ring_id = std::floor(distance / ring_step);
-        int sector_id = std::floor(angle / sector_step);
-        if (ring_id >= rings||ring_id<0)
-            continue;
-        if (sector_id >= sectors||sector_id<0)
-            continue;
-        auto label = filtered_pointcloud->points[i].label;
 
-        if (order_vec[label] >0)
-        {
-            ssc.at<int>(ring_id, sector_id) |= (1<<label);
-        }
-    }
-    return ssc;
-}
-
-cv::Mat1b SSC::calculate_ssc(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud)
+cv::Mat SSC::calculateSSC(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud)
 {
-    auto ring_step = max_dis / rings;
+    auto ring_step = (max_dis - min_dis) / rings;
     auto sector_step = 2. * M_PI / sectors;
-    cv::Mat1b ssc = cv::Mat::zeros(cv::Size(sectors, rings), CV_8U);
+    cv::Mat ssc = cv::Mat::zeros(cv::Size(sectors, rings), CV_8U);
     for (int i = 0; i < (int)filtered_pointcloud->points.size(); i++)
     {
-        double distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
-        if (distance >= max_dis)
-            continue;
-        double angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
-        int ring_id = std::floor(distance / ring_step);
-        int sector_id = std::floor(angle / sector_step);
-        if (ring_id >= rings||ring_id<0)
-            continue;
-        if (sector_id >= sectors||sector_id<0)
-            continue;
         auto label = filtered_pointcloud->points[i].label;
-
-        if (order_vec[label] > order_vec[ssc.at<unsigned char>(ring_id, sector_id)])
+        if (order_vec[label] > 0)
         {
-            ssc.at<unsigned char>(ring_id, sector_id) = label;
-        }
-    }
-    return ssc;
-}
-cv::Mat1f SSC::calculate_sc( pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud){
-    auto ring_step = max_dis / rings;
-    auto sector_step = 2. * M_PI / sectors;
-    cv::Mat1f ssc = -1000*cv::Mat::ones(cv::Size(sectors, rings), CV_32F);
-    for (int i = 0; i < (int)filtered_pointcloud->points.size(); i++)
-    {
-        double distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
-        if (distance >= max_dis)
-            continue;
-        double angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
-        int ring_id = std::floor(distance / ring_step);
-        int sector_id = std::floor(angle / sector_step);
-        if (ring_id >= rings||ring_id<0)
-            continue;
-        if (sector_id >= sectors||sector_id<0)
-            continue;
-        auto z = filtered_pointcloud->points[i].z+2;
-
-        if (z > order_vec[ssc.at<float>(ring_id, sector_id)])
-        {
-            ssc.at<float>(ring_id, sector_id) = z;
+            double distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
+            if (distance >= max_dis || distance < min_dis)
+                continue;
+            int sector_id = cv::fastAtan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
+            // float angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
+            // int sector_id = std::floor(angle / sector_step);
+            int ring_id = (distance - min_dis) / ring_step;
+            if (ring_id >= rings || ring_id < 0)
+                continue;
+            if (sector_id >= sectors || sector_id < 0)
+                continue;
+            if (order_vec[label] > order_vec[ssc.at<unsigned char>(ring_id, sector_id)])
+            {
+                ssc.at<unsigned char>(ring_id, sector_id) = label;
+            }
         }
     }
     return ssc;
 }
 
-cv::Mat3b SSC::getColorImage(cv::Mat1b &desc)
+cv::Mat SSC::getColorImage(cv::Mat &desc)
 {
-    cv::Mat3b out = cv::Mat::zeros(desc.size(), CV_8UC3);
+    cv::Mat out = cv::Mat::zeros(desc.size(), CV_8UC3);
     for (int i = 0; i < desc.rows; ++i)
     {
         for (int j = 0; j < desc.cols; ++j)
@@ -292,7 +218,7 @@ cv::Mat3b SSC::getColorImage(cv::Mat1b &desc)
     return out;
 }
 
-void SSC::calculate_trans(cv::Mat4f &ssc_dis1, cv::Mat4f &ssc_dis2, double &angle, float &diff_x, float &diff_y)
+void SSC::globalICP(cv::Mat &ssc_dis1, cv::Mat &ssc_dis2, double &angle, float &diff_x, float &diff_y)
 {
     double similarity = 100000;
     int sectors = ssc_dis1.cols;
@@ -304,10 +230,8 @@ void SSC::calculate_trans(cv::Mat4f &ssc_dis1, cv::Mat4f &ssc_dis2, double &angl
             int new_col = j + i >= sectors ? j + i - sectors : j + i;
             cv::Vec4f vec1 = ssc_dis1.at<cv::Vec4f>(0, j);
             cv::Vec4f vec2 = ssc_dis2.at<cv::Vec4f>(0, new_col);
-            // if(fabs(vec1[3]-vec2[3])<1e-6){
-                dis_count += fabs(vec1[0] - vec2[0]);
-            // }else{
-            //     dis_count +=10000;
+            // if(vec1[3]==vec2[3]){
+            dis_count += fabs(vec1[0] - vec2[0]);
             // }
         }
         if (dis_count < similarity)
@@ -327,6 +251,7 @@ void SSC::calculate_trans(cv::Mat4f &ssc_dis1, cv::Mat4f &ssc_dis2, double &angl
         temp_dis2.at<cv::Vec4f>(0, i)[1] = ssc_dis2.at<cv::Vec4f>(0, i)[1] * cs - ssc_dis2.at<cv::Vec4f>(0, i)[2] * sn;
         temp_dis2.at<cv::Vec4f>(0, i)[2] = ssc_dis2.at<cv::Vec4f>(0, i)[1] * sn + ssc_dis2.at<cv::Vec4f>(0, i)[2] * cs;
     }
+
     for (int i = 0; i < 100; ++i)
     {
         float dx = 0, dy = 0;
@@ -369,7 +294,6 @@ void SSC::calculate_trans(cv::Mat4f &ssc_dis1, cv::Mat4f &ssc_dis2, double &angl
                 continue;
             }
             cv::Vec4f vec2 = temp_dis2.at<cv::Vec4f>(0, min_id);
-            // std::cout<<fabs(vec1[1]-vec2[1])<<" "<<fabs(vec1[2]-vec2[2])<<std::endl;
             if (fabs(vec1[1] - vec2[1]) < 3 && fabs(vec1[2] - vec2[2]) < 3)
             {
                 dx += vec1[1] - vec2[1];
@@ -379,78 +303,62 @@ void SSC::calculate_trans(cv::Mat4f &ssc_dis1, cv::Mat4f &ssc_dis2, double &angl
         }
         dx = 1. * dx / diff_count;
         dy = 1. * dy / diff_count;
-#if SHOW
+
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr temp_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-#endif
+
         for (int j = 0; j < sectors; ++j)
         {
             if (temp_dis2.at<cv::Vec4f>(0, j)[0] != 0)
             {
                 temp_dis2.at<cv::Vec4f>(0, j)[1] += dx;
                 temp_dis2.at<cv::Vec4f>(0, j)[2] += dy;
-#if SHOW
-                pcl::PointXYZRGB p;
-                p.x = temp_dis2.at<cv::Vec4f>(0, j)[1];
-                p.y = temp_dis2.at<cv::Vec4f>(0, j)[2];
-                p.z = 0;
-                p.r = 255;
-                temp_cloud->points.emplace_back(p);
-#endif
+                if (show)
+                {
+                    pcl::PointXYZRGB p;
+                    p.x = temp_dis2.at<cv::Vec4f>(0, j)[1];
+                    p.y = temp_dis2.at<cv::Vec4f>(0, j)[2];
+                    p.z = 0;
+                    p.r = std::get<0>(_argmax_to_rgb[(int)temp_dis2.at<cv::Vec4f>(0, j)[3]]);
+                    p.g = std::get<1>(_argmax_to_rgb[(int)temp_dis2.at<cv::Vec4f>(0, j)[3]]);
+                    p.b = std::get<2>(_argmax_to_rgb[(int)temp_dis2.at<cv::Vec4f>(0, j)[3]]);
+                    temp_cloud->points.emplace_back(p);
+                }
             }
-#if SHOW
-            if (temp_dis1.at<cv::Vec4f>(0, j)[0] != 0)
+
+            if (show && temp_dis1.at<cv::Vec4f>(0, j)[0] != 0)
             {
                 pcl::PointXYZRGB p;
                 p.x = temp_dis1.at<cv::Vec4f>(0, j)[1];
                 p.y = temp_dis1.at<cv::Vec4f>(0, j)[2];
                 p.z = 0;
-                p.b = 255;
+                p.r = std::get<0>(_argmax_to_rgb[(int)temp_dis1.at<cv::Vec4f>(0, j)[3]]);
+                p.g = std::get<1>(_argmax_to_rgb[(int)temp_dis1.at<cv::Vec4f>(0, j)[3]]);
+                p.b = std::get<2>(_argmax_to_rgb[(int)temp_dis1.at<cv::Vec4f>(0, j)[3]]);
                 temp_cloud->points.emplace_back(p);
             }
-#endif
         }
-#if SHOW
-        viewer->showCloud(temp_cloud);
-        usleep(1000000);
-#endif
+        if (show)
+        {
+            temp_cloud->height = 1;
+            temp_cloud->width = temp_cloud->points.size();
+            viewer->showCloud(temp_cloud);
+            usleep(1000000);
+        }
+
         diff_x += dx;
         diff_y += dy;
-#if SHOW
-        std::cout << i << " diff " << diff_x << " " << diff_y << " " << dx << " " << dy << std::endl;
-#endif
+        if (show)
+        {
+            std::cout << i << " diff " << diff_x << " " << diff_y << " " << dx << " " << dy << std::endl;
+        }
         if (fabs(dx) < 1e-5 && fabs(dy) < 1e-5)
         {
             break;
         }
     }
 }
-double SSC::calculate_dis_sc(cv::Mat1f &desc1, cv::Mat1f &desc2){
-    double similarity = 0;
-    int sectors = desc1.cols;
-    int rings = desc1.rows;
-    int valid_num = 0;
-    for (int p = 0; p < sectors; p++)
-    {
-        for (int q = 0; q < rings; q++)
-        {
-            if (desc1.at<float>(q, p) < -100)
-            {
-                desc1.at<float>(q, p)=0;
-            }
-            if( desc2.at<float>(q, p) < -100){
-                desc2.at<float>(q, p)=0;
-            }
-            if(fabs(desc1.at<float>(q, p))<1e-6&&fabs(desc2.at<float>(q, p))<1e-6){
-                continue;
-            }
-            valid_num++;
-            similarity+=fabs(desc1.at<float>(q, p)-desc2.at<float>(q, p));
-        }
-    }
-    // std::cout<<similarity<<std::endl;
-    return 1-similarity / valid_num;
-}
-double SSC::calculate_dis(cv::Mat1b &desc1, cv::Mat1b &desc2)
+
+double SSC::calculateSim(cv::Mat &desc1, cv::Mat &desc2)
 {
     double similarity = 0;
     int sectors = desc1.cols;
@@ -475,117 +383,43 @@ double SSC::calculate_dis(cv::Mat1b &desc1, cv::Mat1b &desc2)
     // std::cout<<similarity<<std::endl;
     return similarity / valid_num;
 }
-int num_of_one(int num){
-    int count=0;
-    while(num!=0){
-        num=num&(num-1);
-        count++;
-    }
-    return count;
-}
-double SSC::calculate_dis_multi(cv::Mat1i &desc1, cv::Mat1i &desc2){
-    double similarity = 0;
-    int sectors = desc1.cols;
-    int rings = desc1.rows;
-    int valid_num = 0;
-    for (int p = 0; p < sectors; p++)
-    {
-        for (int q = 0; q < rings; q++)
-        {
-            if (desc1.at<int>(q, p) == 0 && desc2.at<int>(q, p) == 0)
-            {
-                continue;
-            }
-            valid_num++;
-            int sam_num=num_of_one(desc1.at<int>(q, p)&desc2.at<int>(q, p));
-            int nonezero_num=num_of_one(desc1.at<int>(q, p)|desc2.at<int>(q, p));
-            similarity+=1.0*sam_num/nonezero_num;
-        }
-    }
-    // std::cout<<similarity<<std::endl;
-    return similarity / valid_num;
-}
-
-double SSC::calculate_angle_test(pcl::PointCloud<pcl::PointXYZL>::Ptr cloud1,pcl::PointCloud<pcl::PointXYZL>::Ptr cloud2){
-    auto desc1 = calculate_ssc(cloud1);
-    auto desc2 = calculate_ssc(cloud2);
-    double similarity = 0.0,angle=0;
-    for(int i=0;i<sectors;i++){
-        int match_count=0;
-        for(int p=0;p<sectors;p++){
-            int new_col = p+i>=sectors?p+i-sectors:p+i;
-            for(int q=0;q<rings;q++){
-                if (desc1.at<unsigned char>(q, p) == 0 && desc2.at<unsigned char>(q, p) == 0)
-            {
-                continue;
-            }
-                if(desc1.at<unsigned char>(q,p)== desc2.at<unsigned char>(q,new_col)){
-                    match_count++;
-                }
-            }
-        }
-        if(match_count>similarity){
-            similarity=match_count;
-            angle = i;
-        }
-
-    }
-    // angle = M_PI * (360. - angle * 360. / sectors) / 180.;
-    return angle;
-}
 
 double SSC::getScore(pcl::PointCloud<pcl::PointXYZL>::Ptr cloud1, pcl::PointCloud<pcl::PointXYZL>::Ptr cloud2, double &angle, float &diff_x, float &diff_y)
 {
-    angle=0;
-    diff_x=0;
-    diff_y=0;
-    cv::Mat4f ssc_dis1=calculate_ssc_range(cloud1);
-    cv::Mat4f ssc_dis2=calculate_ssc_range(cloud2);
-    // angle=calculate_angle_test(cloud1,cloud2);
-    calculate_trans(ssc_dis1, ssc_dis2, angle, diff_x, diff_y);
-    // angle=0;
-    // diff_x=0;
-    // diff_y=0;
+    angle = 0;
+    diff_x = 0;
+    diff_y = 0;
+    cv::Mat ssc_dis1 = project(cloud1);
+    cv::Mat ssc_dis2 = project(cloud2);
+    globalICP(ssc_dis1, ssc_dis2, angle, diff_x, diff_y);
     if (fabs(diff_x > 5) || fabs(diff_y) > 5)
     {
         diff_x = 0;
         diff_y = 0;
     }
-    pcl::PointCloud<pcl::PointXYZL>::Ptr trans_cloud(new pcl::PointCloud<pcl::PointXYZL>);
     Eigen::Affine3f transform = Eigen::Affine3f::Identity();
     transform.translation() << diff_x, diff_y, 0;
     transform.rotate(Eigen::AngleAxisf(angle, Eigen::Vector3f::UnitZ()));
-    pcl::transformPointCloud(*cloud2, *trans_cloud, transform);
-    auto desc1 = calculate_ssc(cloud1);
-    auto desc2 = calculate_ssc(trans_cloud);
-    auto score = calculate_dis(desc1, desc2);
-    // auto desc1 = calculate_ssc_multi(cloud1);
-    // auto desc2 = calculate_ssc_multi(trans_cloud);
-    // auto score = calculate_dis_multi(desc1, desc2);
-    // auto desc1 = calculate_sc(cloud1);
-    // auto desc2 = calculate_sc(trans_cloud);
-    // auto score = calculate_dis_sc(desc1, desc2);
+    pcl::PointCloud<pcl::PointXYZL>::Ptr trans_cloud(new pcl::PointCloud<pcl::PointXYZL>);
+    transformPointCloud(*cloud2, *trans_cloud, transform);
+    auto desc1 = calculateSSC(cloud1);
+    auto desc2 = calculateSSC(trans_cloud);
+    auto score = calculateSim(desc1, desc2);
+    if (show)
+    {
+        transform.translation() << diff_x, diff_y, 5;
+        transformPointCloud(*cloud2, *trans_cloud, transform);
+        auto color_cloud1 = getColorCloud(cloud1);
+        auto color_cloud2 = getColorCloud(trans_cloud);
+        *color_cloud2 += *color_cloud1;
+        viewer->showCloud(color_cloud2);
+        auto color_image1 = getColorImage(desc1);
+        cv::imshow("color image1", color_image1);
+        auto color_image2 = getColorImage(desc2);
+        cv::imshow("color image2", color_image2);
+        cv::waitKey(0);
+    }
 
-
-#if SHOW
-// if(score>0.4){
-    auto color_cloud1 = getColorCloud(cloud1);
-    auto color_cloud2 = getColorCloud(trans_cloud);
-    *color_cloud2 += *color_cloud1;
-    // color_cloud1->height=1;
-    // color_cloud1->width=color_cloud1->points.size();
-    // color_cloud2->height=1;
-    // color_cloud2->width=color_cloud2->points.size();
-    // pcl::io::savePCDFileASCII ("cloud735.pcd", *color_cloud1);
-    // pcl::io::savePCDFileASCII ("cloud1469.pcd", *color_cloud2);
-    viewer->showCloud(color_cloud2);
-    auto color_image1 = getColorImage(desc1);
-    cv::imshow("color image1", color_image1);
-    auto color_image2 = getColorImage(desc2);
-    cv::imshow("color image2", color_image2);
-    cv::waitKey(0);
-// }
-#endif
     return score;
 }
 
@@ -593,6 +427,14 @@ double SSC::getScore(std::string cloud_file1, std::string cloud_file2, std::stri
 {
     auto cloudl1 = getLCloud(cloud_file1, label_file1);
     auto cloudl2 = getLCloud(cloud_file2, label_file2);
-    auto score = getScore(cloudl1, cloudl2, angle,diff_x,diff_y);
+    auto score = getScore(cloudl1, cloudl2, angle, diff_x, diff_y);
+    return score;
+}
+
+double SSC::getScore(std::string cloud_file1, std::string cloud_file2, double &angle, float &diff_x, float &diff_y)
+{
+    auto cloudl1 = getLCloud(cloud_file1);
+    auto cloudl2 = getLCloud(cloud_file2);
+    auto score = getScore(cloudl1, cloudl2, angle, diff_x, diff_y);
     return score;
 }

@@ -3,8 +3,6 @@
 #include <yaml-cpp/yaml.h>
 #include "ssc.h"
 int main(){
-    struct timeval time_t;
-    double time1,time2;
     std::string conf_file="../config/config.yaml";
     auto data_cfg = YAML::LoadFile(conf_file);
     auto cloud_path=data_cfg["eval_seq"]["cloud_path"].as<std::string>();
@@ -48,10 +46,9 @@ int main(){
         std::cerr<<"pose size error:"<<temp_pose.size()<<" "<<temp_pose.size()/12<<" "<<temp_pose.size()%12;
     }
     std::cout<<"convert pose......"<<std::endl;
-    for(int i=0;i<temp_pose.size();++i){
+    for(size_t i=0;i<temp_pose.size();++i){
         int num_id=i%12;
         if(num_id==0){
-            // std::cout<<"convert "<<poses.size()<<std::endl;
             poses.emplace_back(Eigen::Isometry3f::Identity());
         }
         poses.back()(num_id/4,num_id%4)=temp_pose[i];
@@ -89,14 +86,9 @@ int main(){
         sem_file1 = sem_file1 + ".label";
         sem_file2 = label_path + sequ2;
         sem_file2 = sem_file2 + ".label";
-        gettimeofday(&time_t, NULL);
-        time1 = time_t.tv_sec * 1e3 + time_t.tv_usec * 1e-3;
         double angle = 0;
         float diff_x=0, diff_y=0;
-        auto score = ssc.getScore(cloud_file1, cloud_file2,sem_file1,sem_file2, angle,diff_x,diff_y);
-        gettimeofday(&time_t, NULL);
-        time2 = time_t.tv_sec * 1e3 + time_t.tv_usec * 1e-3;
-        // std::cout <<num<<" "<<angle*180./M_PI<<" "<<diff_x<<" "<<diff_y << std::endl;
+        ssc.getScore(cloud_file1, cloud_file2,sem_file1,sem_file2, angle,diff_x,diff_y);
         auto pose1=T.inverse()*poses[atoi(sequ1.c_str())]*T;
         auto pose2=T.inverse()*poses[atoi(sequ2.c_str())]*T;
         auto d_pose=pose1.inverse()*pose2;
@@ -104,17 +96,19 @@ int main(){
         if(yaw<0){
             yaw+=2*M_PI;
         }
-        f_out << yaw << std::endl;
         float error_yaw=fabs((yaw-angle)*180./M_PI);
         if(error_yaw>180){
             error_yaw=360-error_yaw;
         }
+        float error_x=fabs(d_pose(0,3)-diff_x);
+        float error_y=fabs(d_pose(1,3)-diff_y);
         total_yaw+=error_yaw;
-        total_x+=fabs(d_pose(0,3)-diff_x);
-        total_y+=fabs(d_pose(1,3)-diff_y);
-        std::cout<<"pose error:"<<error_yaw<<" "<<fabs(d_pose(0,3)-diff_x)<<" "<<fabs(d_pose(1,3)-diff_y)<<std::endl;
+        total_x+=error_x;
+        total_y+=error_y;
+        f_out <<error_yaw<< std::endl;
+        std::cout<<"pose error: "<<error_x<<" "<<error_y<<" "<<error_yaw<<std::endl;
         num++;
     }
-    std::cout<<"average:"<<total_yaw/(num-1.0)<<" "<<total_x/(num-1.0)<<" "<<total_y/(num-1.0)<<std::endl;
+    std::cout<<"average: "<<total_x/(num-1.0)<<" "<<total_y/(num-1.0)<<" "<<total_yaw/(num-1.0)<<std::endl;
     return 0;
 }
