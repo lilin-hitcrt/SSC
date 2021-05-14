@@ -19,4 +19,5 @@ ${YAML_CPP_INCLUDE_DIR}
 target_link_libraries(ssc
         ${PCL_LIBRARIES}
 	${YAML_CPP_LIBRARIES}
+yaml-cpp
         ${OpenCV_LIBS})
