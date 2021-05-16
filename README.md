@@ -42,16 +42,22 @@ Top-k Recall:
 [pairs](https://drive.google.com/file/d/1Y540LJFZHiaAooUX2KtxNIQhw-kzy7gQ/view?usp=sharing)
 
 ## Results
-
-### Top-k Recall
+### KITTI
+#### Top-k Recall
 When using 5 m as the threshold, the top-k recall rate is shown in the figure:
 
 ![recall](./pic/recall.png)
 
-### Precision-Recall Curve
+#### Precision-Recall Curve
 The Precision-Recall curve when α=100:
 
 ![pr](./pic/pr.png)
+
+### KITTI-360
+#### Precision-Recall Curve
+The Precision-Recall curve when α=10:
+
+![pr](./pic/pr_kitti360.png)
 
 ## Acknowledgement
 
