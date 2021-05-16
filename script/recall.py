@@ -31,8 +31,10 @@ def run(seq='00'):
     print(recall)
     plt.plot(list(range(1,len(recall)+1)),recall,marker='o')
     plt.axis([1,25,0,1])
+    plt.title(seq)
     plt.xlabel('N top retrievals')
     plt.ylabel('Recall (%)')
+    plt.savefig(seq+'_recall.png')
     plt.show()
                 
 

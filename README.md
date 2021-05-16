@@ -16,3 +16,15 @@ Modify the [configuration file](config/config.yaml).
 ```
 ## pairs list
 [pairs](https://drive.google.com/file/d/1Y540LJFZHiaAooUX2KtxNIQhw-kzy7gQ/view?usp=sharing)
+
+## results
+
+### Top-k Recall
+<img src="./script/00_recall.png" alt="00" style="zoom:50%" /> <img src="./script/02_recall.png" alt="02" style="zoom:50%" /> <img src="./script/06_recall.png" alt="05" style="zoom:50%" />
+
+<img src="./script/06_recall.png" alt="06" style="zoom:50%" /> <img src="./script/07_recall.png" alt="07" style="zoom:50%" /> <img src="./script/08_recall.png" alt="08" style="zoom:50%" />
+
+### Precision-Recall Curve
+<img src="./script/00_pr.png" alt="00" style="zoom:50%" /> <img src="./script/02_pr.png" alt="02" style="zoom:50%" /> <img src="./script/06_pr.png" alt="05" style="zoom:50%" />
+
+<img src="./script/06_pr.png" alt="06" style="zoom:50%" /> <img src="./script/07_pr.png" alt="07" style="zoom:50%" /> <img src="./script/08_pr.png" alt="08" style="zoom:50%" />
