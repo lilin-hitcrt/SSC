@@ -80,5 +80,6 @@
         "stack": "cpp",
         "core": "cpp"
     },
-    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "python.pythonPath": "/home/l/anaconda3/envs/py37/bin/python"
 }
