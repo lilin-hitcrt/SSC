@@ -41,6 +41,9 @@ Top-k Recall:
 ### Pair Lists
 [pairs](https://drive.google.com/file/d/1Y540LJFZHiaAooUX2KtxNIQhw-kzy7gQ/view?usp=sharing)
 
+### Semantic label for KITTI-360
+[label](https://drive.google.com/file/d/1QvPw--pfikvWrWNP_tWfxxCawUf7IdEb/view?usp=sharing)
+
 ## Results
 ### KITTI
 #### Top-k Recall

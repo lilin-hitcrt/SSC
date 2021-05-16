@@ -3,7 +3,7 @@
 #include <yaml-cpp/yaml.h>
 #include <iterator>
 #include "ssc.h"
-void zfill(std::string &in_str, int len)
+void zfill(std::string &in_str, size_t len)
 {
     while (in_str.size() < len)
     {
@@ -32,16 +32,16 @@ int main(int argc, char **argv)
     std::istream_iterator<float> start(f_pose), end;
     std::vector<float> pose_temp(start, end);
     std::vector<std::tuple<float, float>> poses;
-    for (int i = 0; i < pose_temp.size(); i += 12)
+    for (size_t i = 0; i < pose_temp.size(); i += 12)
     {
         poses.emplace_back(std::make_tuple(pose_temp[i + 3], pose_temp[i + 11]));
     }
-    for (int i = 51; i < poses.size(); ++i)
+    for (size_t i = 51; i < poses.size(); ++i)
     {
         std::cout<<i<<"/"<<poses.size()<<std::endl;
         auto posei = poses[i];
         std::vector<int> match_id;
-        for (int j = 0; j < i - 50; ++j)
+        for (size_t j = 0; j < i - 50; ++j)
         {
             auto posej = poses[j];
             auto dis = std::sqrt((std::get<1>(posei) - std::get<1>(posej)) * (std::get<1>(posei) - std::get<1>(posej)) + (std::get<0>(posei) - std::get<0>(posej)) * (std::get<0>(posei) - std::get<0>(posej)));
@@ -53,7 +53,7 @@ int main(int argc, char **argv)
         if (!match_id.empty())
         {
             std::vector<std::tuple<float, int> > scores;
-            for (int j = 0; j < i - 50; ++j)
+            for (size_t j = 0; j < i - 50; ++j)
             {
                 std::cout<<i<<"/"<<poses.size()<<"\t"<<j<<"/"<<i-50<<std::endl;
                 std::string sequ1 = std::to_string(i), sequ2 = std::to_string(j);
