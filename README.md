@@ -17,16 +17,25 @@ Build the code:
     mkdir build && cd build && cmake .. && make -j5
 ```
 Modify the [configuration file](config/config.yaml).
+
+A simple example:
 ```bash
     cd ../bin
     ./eval_pair
 ```
-or
+Precision-Recall:
 
 ```bash
     cd ../bin
     ./eval_seq
 ```
+Top-k Recall:
+
+```bash
+    cd ../bin
+    ./eval_top1
+```
+[plot curve](./script/README.md)
 
 ## Data
 ### Pair Lists
@@ -40,7 +49,7 @@ When using 5 m as the threshold, the top-k recall rate is shown in the figure:
 ![recall](./pic/recall.png)
 
 ### Precision-Recall Curve
-The accuracy-recall rate curve when $\alpha=100$:
+The Precision-Recall curve when α=100:
 
 ![pr](./pic/pr.png)
 

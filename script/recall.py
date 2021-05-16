@@ -2,8 +2,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 import sys
 import os
-def run(seq='00'):
-    pose_file="/media/l/yp2/KITTI/odometry/dataset/poses/"+seq+".txt"
+def run(seq='00',folder="/media/l/yp2/KITTI/odometry/dataset/poses/"):
+    pose_file=os.path.join(folder,seq+".txt")
     poses=np.genfromtxt(pose_file)
     poses=poses[:,[3,11]]
     inner=2*np.matmul(poses,poses.T)
@@ -34,7 +34,7 @@ def run(seq='00'):
     plt.title(seq)
     plt.xlabel('N top retrievals')
     plt.ylabel('Recall (%)')
-    plt.savefig(seq+'_recall.png')
+    # plt.savefig(seq+'_recall.png')
     plt.show()
                 
 
