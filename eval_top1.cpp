@@ -15,18 +15,18 @@ bool cmp(std::tuple<float,int>& score1,std::tuple<float,int>& score2){
 }
 int main(int argc, char **argv)
 {
-    std::string seq=argv[1];
     std::string conf_file = "../config/config_kitti.yaml";
-    if (argc > 2)
+    if (argc > 1)
     {
-        conf_file = argv[2];
+        conf_file = argv[1];
     }
     auto data_cfg = YAML::LoadFile(conf_file);
     SSC ssc(conf_file);
-    auto pose_file = "/media/l/yp2/KITTI/odometry/dataset/poses/"+seq+".txt";
-    auto cloud_path = "/media/l/yp2/KITTI/odometry/dataset/sequences/"+seq+"/velodyne/";
-    auto label_path = "/media/l/yp2/KITTI/odometry/dataset/sequences/"+seq+"/labels/";
-    auto out_file = seq+".txt";
+    auto file_name_length=data_cfg["file_name_length"].as<int>();
+    auto pose_file = data_cfg["eval_top1"]["pose_file"].as<std::string>();
+    auto cloud_path = data_cfg["eval_top1"]["cloud_path"].as<std::string>();
+    auto label_path = data_cfg["eval_top1"]["label_path"].as<std::string>();
+    auto out_file = data_cfg["eval_top1"]["out_file"].as<std::string>();
     std::ifstream f_pose(pose_file);
     std::ofstream f_out(out_file);
     std::istream_iterator<float> start(f_pose), end;
@@ -57,8 +57,8 @@ int main(int argc, char **argv)
             {
                 std::cout<<i<<"/"<<poses.size()<<"\t"<<j<<"/"<<i-50<<std::endl;
                 std::string sequ1 = std::to_string(i), sequ2 = std::to_string(j);
-                zfill(sequ1, 6);
-                zfill(sequ2, 6);
+                zfill(sequ1, file_name_length);
+                zfill(sequ2, file_name_length);
                 std::string cloud_file1, cloud_file2, sem_file1, sem_file2;
                 cloud_file1 = cloud_path + sequ1;
                 cloud_file1 = cloud_file1 + ".bin";
