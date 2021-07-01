@@ -4,7 +4,7 @@ Code for IROS2021 paper SSC: Semantic Scan Context for Large-Scale Place Recogni
 ![pipeline](./pic/pipeline.png)
 
 ## Citation
-pass
+
 
 ## Requirements
 [OpenCV](https://opencv.org/)  
@@ -16,7 +16,7 @@ Build the code:
 ```bash
     mkdir build && cd build && cmake .. && make -j5
 ```
-Modify the [configuration file](./config/config.yaml).
+Modify the [configuration file](https://github.com/lilin-hitcrt/SSC/blob/main/config/config_kitti.yaml).
 
 A simple example:
 ```bash
