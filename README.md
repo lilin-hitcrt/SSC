@@ -1,5 +1,5 @@
-# SSC: Semantic Scan Context for Large-Scale Place Recognition
-pass
+# SSC
+Code for IROS2021 paper SSC: Semantic Scan Context for Large-Scale Place Recognition
 
 ![pipeline](./pic/pipeline.png)
 
@@ -16,7 +16,7 @@ Build the code:
 ```bash
     mkdir build && cd build && cmake .. && make -j5
 ```
-Modify the [configuration file](config/config.yaml).
+Modify the [configuration file](./config/config.yaml).
 
 A simple example:
 ```bash
