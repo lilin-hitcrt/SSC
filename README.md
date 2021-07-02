@@ -1,10 +1,20 @@
 # SSC
-Code for IROS2021 paper SSC: Semantic Scan Context for Large-Scale Place Recognition
+Code for IROS2021 paper [SSC: Semantic Scan Context for Large-Scale Place Recognition](https://arxiv.org/abs/2107.00382)
 
 ![pipeline](./pic/pipeline.png)
 
 ## Citation
 
+```
+@misc{li2021ssc,
+      title={SSC: Semantic Scan Context for Large-Scale Place Recognition}, 
+      author={Lin Li and Xin Kong and Xiangrui Zhao and Tianxin Huang and Yong Liu},
+      year={2021},
+      eprint={2107.00382},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+```
 
 ## Requirements
 [OpenCV](https://opencv.org/)  
