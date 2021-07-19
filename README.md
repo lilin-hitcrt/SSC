@@ -8,11 +8,13 @@ Code for IROS2021 paper [SSC: Semantic Scan Context for Large-Scale Place Recogn
 ```
 @inproceedings{li2021ssc,
       title={SSC: Semantic Scan Context for Large-Scale Place Recognition}, 
-      author={Li, Lin and Kong, Xin and Zhao, Xiangrui and Huang, Tianxin and Li, Wanlong and Wen, Feng and Zhang, Hongbo and Liu, Yong},
+      author={L. {Li} and X. {Kong} and X. {Zhao} and T. {Huang} and W. {Li} and F. {Wen} and H. {Zhang} and Y. {Liu}},
       year={2021},
       booktitle={2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+      volume={},
+      number={},
       pages={},
-      organization={IEEE}
+      doi={}
 }
 ```
 
