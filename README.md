@@ -1,5 +1,5 @@
 # SSC
-Code for IROS2021 paper [SSC: Semantic Scan Context for Large-Scale Place Recognition](https://github.com/lilin-hitcrt/SSC/blob/main/paper/ssc.pdf)
+Code for IROS2021 paper [SSC: Semantic Scan Context for Large-Scale Place Recognition](https://arxiv.org/abs/2107.00382)
 
 ![pipeline](./pic/pipeline.png)
 
@@ -55,6 +55,11 @@ Top-k Recall:
 
 ### Semantic label for KITTI-360
 We use the kd-tree to obtain the [semantic information](https://drive.google.com/file/d/1QvPw--pfikvWrWNP_tWfxxCawUf7IdEb/view?usp=sharing) of each scan in the KITTI-360 data set.
+
+### Raw Data
+We provide the [raw data](https://drive.google.com/file/d/1mq09Vkolfo99akq-EvvdA68ei5S0J0fY/view?usp=sharing) of the tables and curves in the paper. For the fairness of the experiment, make sure that your results are also based on the same [evaluation samples](https://drive.google.com/file/d/1Y540LJFZHiaAooUX2KtxNIQhw-kzy7gQ/view?usp=sharing) when citing the provided data. 
+
+We provide the results of all the methods mentioned in the paper on the KITTI and KITTI-360 datasets. The first column of each data file is the similarity score, and the second column is the ground truth. We also provide a python script to draw curves.
 
 ## Results
 ### KITTI
