@@ -10,7 +10,7 @@ eval_pair:
 eval_seq:
   cloud_path: "/media/l/yp2/KITTI-360/data_3d_raw/2013_05_28_drive_0002_sync/velodyne_points/data/"
   label_path: "/media/l/yp2/KITTI-360/labels/2013_05_28_drive_0002_sync/"
-  pairs_file: "../pairs/pairs_kitti360/neg_100/00.txt"
+  pairs_file: "/media/l/yp2/KITTI-360/pairs/neg10/0002.txt"
   out_file: "../out/0002.txt"
 rotate: false
 occlusion: false

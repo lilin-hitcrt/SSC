@@ -145,8 +145,8 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr SSC::getColorCloud(pcl::PointCloud<pcl::P
 
 cv::Mat SSC::project(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud)
 {
-    auto sector_step = 2. * M_PI / sectors;
-    cv::Mat ssc_dis = cv::Mat::zeros(cv::Size(sectors, 1), CV_32FC4);
+    auto sector_step = 2. * M_PI / sectors_range;
+    cv::Mat ssc_dis = cv::Mat::zeros(cv::Size(sectors_range, 1), CV_32FC4);
     for (uint i = 0; i < filtered_pointcloud->points.size(); i++)
     {
         auto label = filtered_pointcloud->points[i].label;
@@ -160,7 +160,7 @@ cv::Mat SSC::project(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud)
             // int sector_id = cv::fastAtan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
             float angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
             int sector_id = std::floor(angle / sector_step);
-            if (sector_id >= sectors || sector_id < 0)
+            if (sector_id >= sectors_range || sector_id < 0)
                 continue;
             // if(ssc_dis.at<cv::Vec4f>(0, sector_id)[3]<10||distance<ssc_dis.at<cv::Vec4f>(0, sector_id)[0]){
             ssc_dis.at<cv::Vec4f>(0, sector_id)[0] = distance;
@@ -176,7 +176,7 @@ cv::Mat SSC::project(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud)
 cv::Mat SSC::calculateSSC(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud)
 {
     auto ring_step = (max_dis - min_dis) / rings;
-    auto sector_step = 2. * M_PI / sectors;
+    auto sector_step = 360. / sectors;
     cv::Mat ssc = cv::Mat::zeros(cv::Size(sectors, rings), CV_8U);
     for (int i = 0; i < (int)filtered_pointcloud->points.size(); i++)
     {
@@ -186,9 +186,7 @@ cv::Mat SSC::calculateSSC(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointclo
             double distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
             if (distance >= max_dis || distance < min_dis)
                 continue;
-            int sector_id = cv::fastAtan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
-            // float angle = M_PI + std::atan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x);
-            // int sector_id = std::floor(angle / sector_step);
+            int sector_id = cv::fastAtan2(filtered_pointcloud->points[i].y, filtered_pointcloud->points[i].x)/ sector_step;
             int ring_id = (distance - min_dis) / ring_step;
             if (ring_id >= rings || ring_id < 0)
                 continue;

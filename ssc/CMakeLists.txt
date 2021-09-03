@@ -7,7 +7,7 @@ if (NOT PCL_FOUND)
     find_package(PCL REQUIRED)
 endif ()
 if (NOT OPENCV_FOUND)
-    find_package(OpenCV  REQUIRED)
+    find_package(OpenCV 4 REQUIRED)
 endif ()
 file(GLOB SRC_LIST *.cpp)
 add_library(ssc SHARED ${SRC_LIST})
@@ -16,8 +16,10 @@ ${PCL_INCLUDE_DIRS}
 ${YAML_CPP_INCLUDE_DIR} 
 ./
 )
+if (NOT YAML_CPP_LIBRARIES)
+    set(YAML_CPP_LIBRARIES yaml-cpp)
+endif ()
 target_link_libraries(ssc
         ${PCL_LIBRARIES}
-	${YAML_CPP_LIBRARIES}
-yaml-cpp
+	    ${YAML_CPP_LIBRARIES}
         ${OpenCV_LIBS})
