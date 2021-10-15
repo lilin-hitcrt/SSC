@@ -14,14 +14,14 @@ def run(seq='00',folder="/media/l/yp2/KITTI/odometry/dataset/poses/"):
     id_pos=id_pos[id_pos[:,0]-id_pos[:,1]>50]
     pos_dict={}
     for v in id_pos:
-        if v[0] in pos_dict.keys():
+        if v[0] in pos_dict:
             pos_dict[v[0]].append(v[1])
         else:
             pos_dict[v[0]]=[v[1]]
     rt_file=np.genfromtxt(seq+'.txt')
     recall=np.array([0.]*(rt_file.shape[1]-1))
     for v in rt_file:
-        assert v[0] in pos_dict.keys()
+        assert v[0] in pos_dict
         truth=pos_dict[v[0]]
         for i in range(1,len(v)):
             if v[i] in truth:
