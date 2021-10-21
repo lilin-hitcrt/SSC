@@ -70,9 +70,11 @@ int main(int argc, char **argv)
                 sem_file2 = sem_file2 + ".label";
                 // std::cout<<cloud_file1<<" "<<sem_file1<<std::endl;
                 // std::cout<<cloud_file2<<" "<<sem_file2<<std::endl;
-                double angle = 0;
-                float diff_x = 0, diff_y = 0;
-                auto score = ssc.getScore(cloud_file1, cloud_file2, sem_file1, sem_file2, angle, diff_x, diff_y);
+                // double angle = 0;
+                // float diff_x = 0, diff_y = 0;
+                // auto score = ssc.getScore(cloud_file1, cloud_file2, sem_file1, sem_file2, angle, diff_x, diff_y);
+                Eigen::Matrix4f transform;
+                auto score=ssc.getScore(cloud_file1,cloud_file2,sem_file1,sem_file2,transform);
                 scores.emplace_back(std::make_tuple(score,j));
             }
             std::sort(scores.begin(),scores.end(),cmp);

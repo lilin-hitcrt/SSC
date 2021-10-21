@@ -6,6 +6,7 @@
 #include <pcl/visualization/cloud_viewer.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/common/transforms.h>
+#include <pcl/registration/icp.h>
 #include <opencv2/opencv.hpp>
 #include <sys/time.h>
 #include <yaml-cpp/yaml.h>
@@ -36,6 +37,9 @@ private:
 public:
     SSC(std::string conf_file);
     ~SSC();
+    double getScore(pcl::PointCloud<pcl::PointXYZL>::Ptr cloud1, pcl::PointCloud<pcl::PointXYZL>::Ptr cloud2, Eigen::Matrix4f& trans);
+    double getScore(std::string cloud_file1, std::string cloud_file2, std::string label_file1, std::string label_file2, Eigen::Matrix4f& transform);
+    double getScore(std::string cloud_file1, std::string cloud_file2, Eigen::Matrix4f& transform);
     double getScore(pcl::PointCloud<pcl::PointXYZL>::Ptr cloud1, pcl::PointCloud<pcl::PointXYZL>::Ptr cloud2, double &angle,float& diff_x,float& diff_y);
     double getScore(std::string cloud_file1,std::string cloud_file2,std::string label_file1,std::string label_file2,double &angle,float& diff_x,float& diff_y);
     double getScore(std::string cloud_file1,std::string cloud_file2,double &angle,float& diff_x,float& diff_y);
@@ -46,5 +50,6 @@ public:
     cv::Mat project(pcl::PointCloud<pcl::PointXYZL>::Ptr filtered_pointcloud);
     cv::Mat getColorImage(cv::Mat &desc);
     void globalICP(cv::Mat& isc_dis1,cv::Mat& isc_dis2,double &angle,float& diff_x,float& diff_y);
+    Eigen::Matrix4f globalICP(cv::Mat &ssc_dis1, cv::Mat &ssc_dis2);
     double calculateSim(cv::Mat &desc1, cv::Mat &desc2);
 };

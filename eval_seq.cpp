@@ -45,11 +45,15 @@ int main(int argc,char** argv){
         sem_file1 = sem_file1 + ".label";
         sem_file2 = label_path + sequ2;
         sem_file2 = sem_file2 + ".label";
-        double angle = 0;
-        float diff_x=0, diff_y=0;
-        auto score = ssc.getScore(cloud_file1, cloud_file2,sem_file1,sem_file2, angle,diff_x,diff_y);
+        // double angle = 0;
+        // float diff_x=0, diff_y=0;
+        // auto score = ssc.getScore(cloud_file1, cloud_file2,sem_file1,sem_file2, angle,diff_x,diff_y);
+        // f_out << score << " " << label << std::endl;
+        // std::cout <<num<< " " << angle*180./M_PI<<" "<<diff_x<<" "<<diff_y << " " << score << " " << label << std::endl;
+        Eigen::Matrix4f transform;
+        auto score=ssc.getScore(cloud_file1,cloud_file2,sem_file1,sem_file2,transform);//refine angle
         f_out << score << " " << label << std::endl;
-        std::cout <<num<< " " << angle*180./M_PI<<" "<<diff_x<<" "<<diff_y << " " << score << " " << label << std::endl;
+        std::cout<<num<<" "<<score<<" "<<label<<std::endl;
         num++;
     }
     return 0;

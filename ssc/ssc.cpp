@@ -1,4 +1,5 @@
 #include "ssc.h"
+#include "pcl/impl/point_types.hpp"
 SSC::SSC(std::string conf_file)
 {
     auto data_cfg = YAML::LoadFile(conf_file);
@@ -356,6 +357,54 @@ void SSC::globalICP(cv::Mat &ssc_dis1, cv::Mat &ssc_dis2, double &angle, float &
     }
 }
 
+Eigen::Matrix4f SSC::globalICP(cv::Mat &ssc_dis1, cv::Mat &ssc_dis2){
+    double similarity = 100000;
+    float angle;
+    int sectors = ssc_dis1.cols;
+    for (int i = 0; i < sectors; ++i)
+    {
+        float dis_count = 0;
+        for (int j = 0; j < sectors; ++j)
+        {
+            int new_col = j + i >= sectors ? j + i - sectors : j + i;
+            cv::Vec4f vec1 = ssc_dis1.at<cv::Vec4f>(0, j);
+            cv::Vec4f vec2 = ssc_dis2.at<cv::Vec4f>(0, new_col);
+            // if(vec1[3]==vec2[3]){
+            dis_count += fabs(vec1[0] - vec2[0]);
+            // }
+        }
+        if (dis_count < similarity)
+        {
+            similarity = dis_count;
+            angle = i;
+        }
+    }
+    angle = M_PI * (360. - angle * 360. / sectors) / 180.;
+    auto cs = cos(angle);
+    auto sn = sin(angle);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud1(new pcl::PointCloud<pcl::PointXYZ>),cloud2(new pcl::PointCloud<pcl::PointXYZ>);
+    for (int i = 0; i < sectors; ++i)
+    {
+        if(ssc_dis1.at<cv::Vec4f>(0, i)[3]>0){
+            cloud1->push_back(pcl::PointXYZ(ssc_dis1.at<cv::Vec4f>(0, i)[1],ssc_dis1.at<cv::Vec4f>(0, i)[2],0.));
+        }
+        if(ssc_dis2.at<cv::Vec4f>(0, i)[3]>0){
+            float tpx = ssc_dis2.at<cv::Vec4f>(0, i)[1] * cs - ssc_dis2.at<cv::Vec4f>(0, i)[2] * sn;
+            float tpy = ssc_dis2.at<cv::Vec4f>(0, i)[1] * sn + ssc_dis2.at<cv::Vec4f>(0, i)[2] * cs;
+            cloud2->push_back(pcl::PointXYZ(tpx,tpy,0.));
+        }
+    }
+    pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+    icp.setInputSource(cloud2);
+    icp.setInputTarget(cloud1);
+    pcl::PointCloud<pcl::PointXYZ> Final;
+    icp.align(Final);
+    auto trans=icp.getFinalTransformation();
+    Eigen::Affine3f trans1 = Eigen::Affine3f::Identity();
+    trans1.rotate(Eigen::AngleAxisf(angle, Eigen::Vector3f::UnitZ()));
+    return trans*trans1.matrix();
+}
+
 double SSC::calculateSim(cv::Mat &desc1, cv::Mat &desc2)
 {
     double similarity = 0;
@@ -405,7 +454,7 @@ double SSC::getScore(pcl::PointCloud<pcl::PointXYZL>::Ptr cloud1, pcl::PointClou
     auto score = calculateSim(desc1, desc2);
     if (show)
     {
-        transform.translation() << diff_x, diff_y, 5;
+        transform.translation() << diff_x, diff_y, 0;
         transformPointCloud(*cloud2, *trans_cloud, transform);
         auto color_cloud1 = getColorCloud(cloud1);
         auto color_cloud2 = getColorCloud(trans_cloud);
@@ -421,6 +470,33 @@ double SSC::getScore(pcl::PointCloud<pcl::PointXYZL>::Ptr cloud1, pcl::PointClou
     return score;
 }
 
+double SSC::getScore(pcl::PointCloud<pcl::PointXYZL>::Ptr cloud1, pcl::PointCloud<pcl::PointXYZL>::Ptr cloud2, Eigen::Matrix4f& transform)
+{
+    cv::Mat ssc_dis1 = project(cloud1);
+    cv::Mat ssc_dis2 = project(cloud2);
+    transform=globalICP(ssc_dis1, ssc_dis2);
+    pcl::PointCloud<pcl::PointXYZL>::Ptr trans_cloud(new pcl::PointCloud<pcl::PointXYZL>);
+    transformPointCloud(*cloud2, *trans_cloud, transform);
+    auto desc1 = calculateSSC(cloud1);
+    auto desc2 = calculateSSC(trans_cloud);
+    auto score = calculateSim(desc1, desc2);
+    if (show)
+    {
+        transform(2,3)=0.;
+        transformPointCloud(*cloud2, *trans_cloud, transform);
+        auto color_cloud1 = getColorCloud(cloud1);
+        auto color_cloud2 = getColorCloud(trans_cloud);
+        *color_cloud2 += *color_cloud1;
+        viewer->showCloud(color_cloud2);
+        auto color_image1 = getColorImage(desc1);
+        cv::imshow("color image1", color_image1);
+        auto color_image2 = getColorImage(desc2);
+        cv::imshow("color image2", color_image2);
+        cv::waitKey(0);
+    }
+    return score;
+}
+
 double SSC::getScore(std::string cloud_file1, std::string cloud_file2, std::string label_file1, std::string label_file2, double &angle, float &diff_x, float &diff_y)
 {
     auto cloudl1 = getLCloud(cloud_file1, label_file1);
@@ -429,10 +505,27 @@ double SSC::getScore(std::string cloud_file1, std::string cloud_file2, std::stri
     return score;
 }
 
+double SSC::getScore(std::string cloud_file1, std::string cloud_file2, std::string label_file1, std::string label_file2, Eigen::Matrix4f& transform)
+{
+    auto cloudl1 = getLCloud(cloud_file1, label_file1);
+    auto cloudl2 = getLCloud(cloud_file2, label_file2);
+    auto score = getScore(cloudl1, cloudl2, transform);
+    return score;
+}
+
+
 double SSC::getScore(std::string cloud_file1, std::string cloud_file2, double &angle, float &diff_x, float &diff_y)
 {
     auto cloudl1 = getLCloud(cloud_file1);
     auto cloudl2 = getLCloud(cloud_file2);
     auto score = getScore(cloudl1, cloudl2, angle, diff_x, diff_y);
+    return score;
+}
+
+double SSC::getScore(std::string cloud_file1, std::string cloud_file2, Eigen::Matrix4f& transform)
+{
+    auto cloudl1 = getLCloud(cloud_file1);
+    auto cloudl2 = getLCloud(cloud_file2);
+    auto score = getScore(cloudl1, cloudl2, transform);
     return score;
 }
