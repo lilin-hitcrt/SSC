@@ -359,7 +359,7 @@ void SSC::globalICP(cv::Mat &ssc_dis1, cv::Mat &ssc_dis2, double &angle, float &
 
 Eigen::Matrix4f SSC::globalICP(cv::Mat &ssc_dis1, cv::Mat &ssc_dis2){
     double similarity = 100000;
-    float angle;
+    float angle=0;
     int sectors = ssc_dis1.cols;
     for (int i = 0; i < sectors; ++i)
     {
@@ -439,7 +439,7 @@ double SSC::getScore(pcl::PointCloud<pcl::PointXYZL>::Ptr cloud1, pcl::PointClou
     cv::Mat ssc_dis1 = project(cloud1);
     cv::Mat ssc_dis2 = project(cloud2);
     globalICP(ssc_dis1, ssc_dis2, angle, diff_x, diff_y);
-    if (fabs(diff_x > 5) || fabs(diff_y) > 5)
+    if (fabs(diff_x)>5 || fabs(diff_y) > 5)
     {
         diff_x = 0;
         diff_y = 0;
