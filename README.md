@@ -60,6 +60,8 @@ We provide the [raw data](https://drive.google.com/file/d/1mq09Vkolfo99akq-EvvdA
 
 We provide the results of all the methods mentioned in the paper on the KITTI and KITTI-360 datasets. The first column of each data file is the similarity score, and the second column is the ground truth. We also provide a python script to draw curves.
 
+Our latest code has been further optimized and has better performance than the original code used in our paper. If you want to reproduce the results in our paper, please use this [old version code](https://github.com/lilin-hitcrt/SSC/tree/c5bca98f2bab4fdb5f7c94640f5fc63821ee56f2) (note that the CMakeKists.txt file in the root directory has some problems and needs simple modification). 
+
 ## Results
 ### KITTI
 #### Top-k Recall
