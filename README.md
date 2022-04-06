@@ -15,6 +15,16 @@ Code for IROS2021 paper [SSC: Semantic Scan Context for Large-Scale Place Recogn
   number={},
   pages={2092-2099},
   doi={10.1109/IROS51168.2021.9635904}}
+
+@article{Li2022,
+  author = {Li, Lin and Kong, Xin and Zhao, Xiangrui and Huang, Tianxin and Liu, Yong},
+  doi = {10.1007/s10514-022-10037-w},
+  issn = {1573-7527},
+  journal = {Autonomous Robots},
+  publisher = {Springer US},
+  title = {{Semantic scan context : a novel semantic-based loop-closure method for LiDAR SLAM}},
+  url = {https://doi.org/10.1007/s10514-022-10037-w},
+  year = {2022}}
 ```
 
 ## Requirements

@@ -22,7 +22,7 @@ private:
     std::vector<int> label_map;
     double max_dis=50;
     double min_dis=5;
-    int rings=12;
+    int rings=24;
     int sectors=360;
     int sectors_range=360;
     bool rotate=false;
